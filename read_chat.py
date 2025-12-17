@@ -39,7 +39,7 @@ async def read_chat(host, port, log_path):
 
 def main():
     host_default = env.str('HOST', 'minechat.dvmn.org')
-    port_default = env.int('PORT', 5000)
+    port_default = env.int('READ_PORT', 5000)
     log_path_default = env.str('LOGS', 'underground_chat.txt')
 
     parser = argparse.ArgumentParser(description='Подключение к чату')
