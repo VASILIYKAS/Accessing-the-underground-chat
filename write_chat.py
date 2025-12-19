@@ -103,6 +103,7 @@ async def register_user(host, port, name):
 def main():
     host_default = env.str('HOST', 'minechat.dvmn.org')
     port_default = env.int('WRITE_PORT', 5050)
+    user_name_default = env.str('USER_NAME', 'NewUser')
 
     parser = argparse.ArgumentParser(description='Отправить сообщение в чат')
 
@@ -124,7 +125,7 @@ def main():
     )
 
     parser.add_argument(
-        '--log',
+        '--logging',
         action='store_true',
         help='Включить логирование (по умолчанию: выключено)'
     )
@@ -134,23 +135,38 @@ def main():
         help='Имя для регистрации в чате.'
     )
 
+    parser.add_argument(
+        '--user-token', 
+        help='Токен аккаунта (account_hash)'
+    )
+
     args = parser.parse_args()
 
-    setup_logging(args.log)
+    setup_logging(args.logging)
 
-    if args.user_name is not None:
-        asyncio.run(register_user(args.host, args.port, args.user_name))
+    user_token = args.user_token
+
+    if user_token is None:
+        try:
+            with open('register_info.json', 'r') as f:
+                user_info = json.load(f)
+                user_token = user_info.get('account_hash')
+        except FileNotFoundError:
+            user_token = None
+            print('Зарегестрируйтесь командой: python3 write_chat.py --user-name "Ваше имя"')
+
+    if user_token is None:
+        name = args.user_name or user_name_default
+        name = name.strip() or "Anonymous"
+        user_token = asyncio.run(register_user(args.host, args.port, name))
         return
 
-    user_token = None
-
-    try:
-        with open('register_info.json', 'r') as f:
-            user_hash = json.load(f)
-        user_token = user_hash.get('account_hash')
-    except FileNotFoundError:
-        user_token = None
-        print('Зарегестрируйтесь командой: python3 write_chat.py --user-name "Ваше имя"')
+    if args.user_name is not None:
+        name = args.user_name
+        if not name:
+            name = env.str('USER_NAME', 'NewUser')
+        asyncio.run(register_user(args.host, args.port, name))
+        return
 
     if args.message and user_token:
         asyncio.run(submit_message(args.host, args.port, args.message, user_token))
