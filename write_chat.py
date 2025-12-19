@@ -74,6 +74,7 @@ async def submit_message(host, port, message, user_token):
 
 async def register_user(host, port, name):
     reader, writer = await asyncio.open_connection(host, port)
+    user_name = name.replace('\n', '\\n')
 
     try:
         await reader.readline()
@@ -81,7 +82,7 @@ async def register_user(host, port, name):
         await writer.drain()
 
         await reader.readline()
-        writer.write(f'{name}\n'.encode('utf-8'))
+        writer.write(f'{user_name}\n'.encode('utf-8'))
         await writer.drain()
 
         server_response = await reader.readline()
