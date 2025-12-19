@@ -19,41 +19,57 @@ def setup_logging(enable: bool):
         logging.disable(logging.CRITICAL)
 
 
-async def write_chat(host, port, user_token, message):
+async def authorise(host, port, user_token):
     logging.info(f'Подключение к {host}:{port}')
-
     reader, writer = await asyncio.open_connection(host, port)
 
     try:
         welcome = await reader.readline()
-        welcome_message = welcome.decode('utf-8', errors='ignore')
-        logging.debug(welcome_message)
-
-        logging.debug(f'Отправка токена: {user_token}')
+        logging.debug(f'{welcome.decode()}')
+        
         writer.write(f'{user_token}\n'.encode('utf-8'))
         await writer.drain()
+        
+        auth_response = await reader.readline()
+        auth_data = json.loads(auth_response.decode())
+        logging.debug(f'Авторизация: {auth_data}')
+        
+        if auth_data is None:
+            print('Требуется регистрация.')
+            writer.close()
+            await writer.wait_closed()
+            return None
+        
+        print('Вы успешно авторизовались.')
+        return reader, writer
+        
+    except Exception as e:
+        logging.error(f'Ошибка авторизации: {e}')
+        writer.close()
+        await writer.wait_closed()
+        return None
 
-        token_response = await reader.readline()
-        json_str = token_response.decode('utf-8').strip()
-        logging.debug(f'Ответ сервера: {json_str}')
 
-        if json.loads(json_str) is None:
-            print(f'Токен: {user_hash} не найден.')
-            return
+async def submit_message(host, port, message, user_token):
+    auth = await authorise(host, port, user_token)
 
+    if auth is None:
+        return
+
+    reader, writer = auth
+
+    try:
+        logging.debug(f'Отправка сообщения: "{message}"')
         writer.write(f'{message}\n\n'.encode('utf-8'))
         await writer.drain()
-
-        logging.info(f'Сообщение: "{message}", успешно отправлено!')
-
+        
+        print('Сообщение отправлено!')
+        
     except Exception as e:
-        logging.error(f'Ошибка при отправке: {e}')
-        raise
-
+        logging.error(f'Ошибка отправки сообщения: {e}')
     finally:
         writer.close()
         await writer.wait_closed()
-        logging.info('Соединение закрыто')
 
 
 async def register_user(host, port, name):
@@ -86,7 +102,6 @@ async def register_user(host, port, name):
 def main():
     host_default = env.str('HOST', 'minechat.dvmn.org')
     port_default = env.int('WRITE_PORT', 5050)
-    user_name = env.str('USER_NAME', None)
 
     parser = argparse.ArgumentParser(description='Отправить сообщение в чат')
 
@@ -115,11 +130,18 @@ def main():
 
     parser.add_argument(
         '--user-name',
-        default=user_name,
         help='Имя для регистрации в чате.'
     )
-    
+
     args = parser.parse_args()
+
+    setup_logging(args.log)
+
+    if args.user_name is not None:
+        asyncio.run(register_user(args.host, args.port, args.user_name))
+        return
+
+    user_token = None
 
     try:
         with open('register_info.json', 'r') as f:
@@ -127,13 +149,12 @@ def main():
         user_token = user_hash.get('account_hash')
     except FileNotFoundError:
         user_token = None
+        print('Зарегестрируйтесь командой: python3 write_chat.py --user-name "Ваше имя"')
 
-    setup_logging(args.log)
-
-    if user_token is None:
-        asyncio.run(register_user(args.host, args.port, args.user_name))
-    else:
-        asyncio.run(write_chat(args.host, args.port, user_token, args.message))
+    if args.message and user_token:
+        asyncio.run(submit_message(args.host, args.port, args.message, user_token))
+    elif not args.message:
+        print('Для отправки сообщение используйте команду: python3 write_chat.py --message "Текст сообщения"')
 
 
 if __name__ == "__main__":
