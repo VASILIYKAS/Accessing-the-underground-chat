@@ -2,3 +2,6 @@ venv/
 underground_chat.txt
 .env
 register_info.json
+*.py[cod]
+*$py.class
+__pycache__/
